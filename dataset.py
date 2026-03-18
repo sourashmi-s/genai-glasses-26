@@ -38,9 +38,11 @@ class FacesDataset(Dataset):
         train_df["filename"] = train_df[FILE_COL].apply(lambda x: f"face-{int(x)}.png")
         test_df["filename"] = test_df[FILE_COL].apply(lambda x: f"face-{int(x)}.png")
 
-        combined = pd.concat([train_df[["filename", "label"]], test_df[["filename", "label"]]], ignore_index=True)
-        self.data = combined.reset_index(drop=True)
         self.resized_dir = resized_dir
+
+        combined = pd.concat([train_df[["filename", "label"]], test_df[["filename", "label"]]], ignore_index=True)
+        combined = combined[combined["filename"].apply(lambda f: os.path.exists(os.path.join(resized_dir, f)))]
+        self.data = combined.reset_index(drop=True)
 
     def __len__(self):
         return len(self.data)
