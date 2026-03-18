@@ -2,16 +2,19 @@ import os
 import cv2
 import pandas as pd
 import matplotlib.pyplot as plt
-from config import FILE_COL, IMG_DIR, RESIZED_DIR, TRAIN_CSV, IMG_SIZE
+from config import FILE_COL, IMG_DIR, RESIZED_DIR, TRAIN_CSV, TEST_CSV, IMG_SIZE
 
 
 def resize_dataset():
     os.makedirs(RESIZED_DIR, exist_ok=True)
-    df = pd.read_csv(TRAIN_CSV)
+
+    train_df = pd.read_csv(TRAIN_CSV)
+    test_df = pd.read_csv(TEST_CSV)
+    all_ids = pd.concat([train_df[[FILE_COL]], test_df[[FILE_COL]]], ignore_index=True)
 
     success = skipped = failed = 0
 
-    for _, row in df.iterrows():
+    for _, row in all_ids.iterrows():
         filename = f"face-{int(row[FILE_COL])}.png"
         src_path = os.path.join(IMG_DIR, filename)
         dst_path = os.path.join(RESIZED_DIR, filename)
