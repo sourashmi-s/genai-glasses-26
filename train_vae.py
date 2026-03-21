@@ -16,8 +16,8 @@ FILTER_SIZE    = 3
 NUM_LAYERS     = 3
 ACTIVATION     = "elu"
 DECODER_TYPE   = "interpolation"
-NUM_RES_BLOCKS = 0
-BETA           = 0.5
+NUM_RES_BLOCKS = 1
+BETA           = 0.25
 LR             = 1e-3
 NUM_EPOCHS     = 100
 PERC_WEIGHT    = 0.01
@@ -112,11 +112,9 @@ def train():
             real_labeled = val_labels != -1
             val_real     = val_imgs[real_labeled]
 
-            n_gen      = min(len(val_real), 32)
-            glasses    = model.generate(label=1, n=n_gen//2, device=DEVICE)
-            no_glasses = model.generate(label=0, n=n_gen//2, device=DEVICE)
-            generated  = torch.cat([glasses, no_glasses], dim=0)
-            val_ssim   = compute_ssim(generated, val_real[:len(generated)])
+            val_labeled_labels = val_labels[real_labeled]
+            recon, mu, logvar  = model(val_real, val_labeled_labels)
+            val_ssim           = compute_ssim(recon, val_real)
 
         print(f"Epoch {epoch:3d} | Loss: {total_loss/n_batches:.4f} | SSIM: {val_ssim:.4f}")
 
