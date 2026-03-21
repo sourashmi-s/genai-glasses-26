@@ -19,11 +19,13 @@ class PerceptualLoss(nn.Module):
         self.blocks = nn.Sequential(*list(vgg.features)[:16]).eval()
         for p in self.parameters():
             p.requires_grad = False
+        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1))
+        self.register_buffer("std",  torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1))
 
     def forward(self, recon, target):
-        recon_f  = self.blocks(recon)
-        target_f = self.blocks(target)
-        return F.mse_loss(recon_f, target_f)
+        recon_in  = (recon  * 0.5 + 0.5 - self.mean) / self.std
+        target_in = (target * 0.5 + 0.5 - self.mean) / self.std
+        return F.mse_loss(self.blocks(recon_in), self.blocks(target_in))
 
 
 class ResBlock(nn.Module):
