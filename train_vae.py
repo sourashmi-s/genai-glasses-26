@@ -11,16 +11,16 @@ from vae import VAE, vae_loss, PerceptualLoss
 from config import DEVICE, BATCH_SIZE, NUM_WORKERS, OUTPUT_DIR, MODEL_DIR
 
 
-LATENT_DIM     = 128
+LATENT_DIM     = 256
 FILTER_SIZE    = 3
 NUM_LAYERS     = 3
 ACTIVATION     = "elu"
 DECODER_TYPE   = "interpolation"
-NUM_RES_BLOCKS = 1
-BETA           = 0.25
+NUM_RES_BLOCKS = 2
+BETA           = 0.13
 LR             = 1e-3
 NUM_EPOCHS     = 100
-PERC_WEIGHT    = 0.01
+PERC_WEIGHT    = 0.05
 
 
 def compute_ssim(generated_imgs, real_imgs):
