@@ -15,12 +15,12 @@ LATENT_DIM     = 128
 FILTER_SIZE    = 3
 NUM_LAYERS     = 3
 ACTIVATION     = "relu"
-DECODER_TYPE   = "deconv"
+DECODER_TYPE   = "interpolation"
 NUM_RES_BLOCKS = 0
-BETA           = 1.0
+BETA           = 0.67
 LR             = 1e-3
 NUM_EPOCHS     = 100
-PERC_WEIGHT    = 0.001
+PERC_WEIGHT    = 0.1
 
 
 def compute_ssim(generated_imgs, real_imgs):
