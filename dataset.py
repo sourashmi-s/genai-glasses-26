@@ -16,7 +16,7 @@ TRAIN_TRANSFORMS = A.Compose([
     A.Resize(64, 64),
     A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
     A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=15, val_shift_limit=10, p=0.3),
-    A.GaussNoise(p=0.3),
+    A.GaussNoise(noise_scale_factor=1.0, p=0.3),
     A.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
     ToTensorV2()
 ])
