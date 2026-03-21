@@ -7,19 +7,20 @@ import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
 from dataset import FacesDataset
-from vae import VAE, vae_loss
+from vae import VAE, vae_loss, PerceptualLoss
 from config import DEVICE, BATCH_SIZE, NUM_WORKERS, OUTPUT_DIR, MODEL_DIR
 
 
-LATENT_DIM     = 256      
-FILTER_SIZE    = 5        
-NUM_LAYERS     = 3        
-ACTIVATION     = "leaky_relu"  
-DECODER_TYPE   = "interpolation"  
-NUM_RES_BLOCKS = 2        
-BETA           = 0.5    
-LR             = 5e-4     
-NUM_EPOCHS     = 100     
+LATENT_DIM     = 128
+FILTER_SIZE    = 3
+NUM_LAYERS     = 3
+ACTIVATION     = "relu"
+DECODER_TYPE   = "interpolation"
+NUM_RES_BLOCKS = 1
+BETA           = 0.25
+LR             = 1e-3
+NUM_EPOCHS     = 100
+PERC_WEIGHT    = 0.1
 
 
 def compute_ssim(generated_imgs, real_imgs):
@@ -48,7 +49,7 @@ def train():
     val_loader   = DataLoader(val_set,   batch_size=BATCH_SIZE, shuffle=False,
                               num_workers=NUM_WORKERS)
 
-    model = VAE(
+    model    = VAE(
         latent_dim     = LATENT_DIM,
         num_classes    = 2,
         filter_size    = FILTER_SIZE,
@@ -58,13 +59,14 @@ def train():
         num_res_blocks = NUM_RES_BLOCKS
     ).to(DEVICE)
 
+    perc_fn   = PerceptualLoss().to(DEVICE)
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+    best_ssim = -1.0
+
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Training on {DEVICE}")
     print(f"Train: {len(train_set)} | Val: {len(val_set)}")
     print(f"Model parameters: {total_params:,}\n")
-
-    optimizer = optim.Adam(model.parameters(), lr=LR)
-    best_ssim = -1.0
 
     for epoch in range(1, NUM_EPOCHS + 1):
 
@@ -81,19 +83,23 @@ def train():
             optimizer.zero_grad()
 
             if labeled.sum() > 0:
-                l_imgs, l_labels      = imgs[labeled], labels[labeled]
-                recon, mu, logvar     = model(l_imgs, l_labels)
-                loss, _, _            = vae_loss(recon, l_imgs, mu, logvar, beta=BETA)
-                loss.backward()
-                total_loss += loss.item()
+                l_imgs, l_labels  = imgs[labeled], labels[labeled]
+                recon, mu, logvar = model(l_imgs, l_labels)
+                loss, _, _        = vae_loss(recon, l_imgs, mu, logvar, beta=BETA)
+                perc_loss         = perc_fn(recon, l_imgs) * PERC_WEIGHT
+                total_l           = loss + perc_loss
+                total_l.backward()
+                total_loss       += total_l.item()
 
             if unlabeled.sum() > 0:
-                u_imgs                    = imgs[unlabeled]
-                dummy                     = torch.zeros(unlabeled.sum(), dtype=torch.long).to(DEVICE)
-                recon_u, mu_u, logvar_u   = model(u_imgs, dummy)
-                loss_u, _, _              = vae_loss(recon_u, u_imgs, mu_u, logvar_u, beta=BETA)
-                loss_u.backward()
-                total_loss += loss_u.item()
+                u_imgs                  = imgs[unlabeled]
+                dummy                   = torch.zeros(unlabeled.sum(), dtype=torch.long).to(DEVICE)
+                recon_u, mu_u, logvar_u = model(u_imgs, dummy)
+                loss_u, _, _            = vae_loss(recon_u, u_imgs, mu_u, logvar_u, beta=BETA)
+                perc_loss_u             = perc_fn(recon_u, u_imgs) * PERC_WEIGHT
+                total_u                 = loss_u + perc_loss_u
+                total_u.backward()
+                total_loss             += total_u.item()
 
             optimizer.step()
             n_batches += 1
@@ -103,15 +109,14 @@ def train():
             val_imgs, val_labels = next(iter(val_loader))
             val_imgs, val_labels = val_imgs.to(DEVICE), val_labels.to(DEVICE)
 
-            real_labeled  = val_labels != -1
-            val_real      = val_imgs[real_labeled]
+            real_labeled = val_labels != -1
+            val_real     = val_imgs[real_labeled]
 
-            n_gen         = min(len(val_real), 32)
-            glasses       = model.generate(label=1, n=n_gen//2, device=DEVICE)
-            no_glasses    = model.generate(label=0, n=n_gen//2, device=DEVICE)
-            generated     = torch.cat([glasses, no_glasses], dim=0)
-
-            val_ssim      = compute_ssim(generated, val_real[:len(generated)])
+            n_gen      = min(len(val_real), 32)
+            glasses    = model.generate(label=1, n=n_gen//2, device=DEVICE)
+            no_glasses = model.generate(label=0, n=n_gen//2, device=DEVICE)
+            generated  = torch.cat([glasses, no_glasses], dim=0)
+            val_ssim   = compute_ssim(generated, val_real[:len(generated)])
 
         print(f"Epoch {epoch:3d} | Loss: {total_loss/n_batches:.4f} | SSIM: {val_ssim:.4f}")
 

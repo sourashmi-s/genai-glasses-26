@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 
 def get_act(name):
@@ -10,16 +11,29 @@ def get_act(name):
     raise ValueError(f"Unknown activation: {name}")
 
 
+class PerceptualLoss(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        vgg         = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+        self.blocks = nn.Sequential(*list(vgg.features)[:16]).eval()
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def forward(self, recon, target):
+        recon_f  = self.blocks(recon)
+        target_f = self.blocks(target)
+        return F.mse_loss(recon_f, target_f)
+
+
 class ResBlock(nn.Module):
 
     def __init__(self, channels, filter_size, act_name):
         super().__init__()
-        pad = filter_size // 2
-
+        pad        = filter_size // 2
         self.conv1 = nn.Conv2d(channels, channels, filter_size, padding=pad)
         self.bn1   = nn.BatchNorm2d(channels)
         self.act1  = get_act(act_name)
-
         self.conv2 = nn.Conv2d(channels, channels, filter_size, padding=pad)
         self.bn2   = nn.BatchNorm2d(channels)
         self.act2  = get_act(act_name)
@@ -36,7 +50,7 @@ class UpsampleBlock(nn.Module):
 
     def __init__(self, in_ch, out_ch, filter_size):
         super().__init__()
-        pad = filter_size // 2
+        pad       = filter_size // 2
         self.up   = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
         self.conv = nn.Conv2d(in_ch, out_ch, filter_size, padding=pad)
 
@@ -47,7 +61,7 @@ class UpsampleBlock(nn.Module):
 class VAE(nn.Module):
 
     def __init__(self, latent_dim=128, num_classes=2, filter_size=3,
-                 num_layers=3, activation="relu", decoder_type="deconv",
+                 num_layers=3, activation="relu", decoder_type="interpolation",
                  num_res_blocks=1):
         super().__init__()
 
