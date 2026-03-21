@@ -12,15 +12,15 @@ from config import DEVICE, BATCH_SIZE, NUM_WORKERS, OUTPUT_DIR, MODEL_DIR
 
 
 LATENT_DIM     = 128
-FILTER_SIZE    = 3
-NUM_LAYERS     = 3
-ACTIVATION     = "relu"
+FILTER_SIZE    = 4
+NUM_LAYERS     = 4
+ACTIVATION     = "elu"
 DECODER_TYPE   = "interpolation"
 NUM_RES_BLOCKS = 0
-BETA           = 0.67
+BETA           = 0.4
 LR             = 1e-3
 NUM_EPOCHS     = 100
-PERC_WEIGHT    = 0.1
+PERC_WEIGHT    = 0.01
 
 
 def compute_ssim(generated_imgs, real_imgs):
