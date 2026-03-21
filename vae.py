@@ -3,24 +3,58 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def get_act(name):
+    if name == "relu":       return nn.ReLU()
+    if name == "leaky_relu": return nn.LeakyReLU(0.2)
+    if name == "elu":        return nn.ELU()
+    raise ValueError(f"Unknown activation: {name}")
+
+
+class ResBlock(nn.Module):
+
+    def __init__(self, channels, filter_size, act_name):
+        super().__init__()
+        pad = filter_size // 2
+
+        self.conv1 = nn.Conv2d(channels, channels, filter_size, padding=pad)
+        self.bn1   = nn.BatchNorm2d(channels)
+        self.act1  = get_act(act_name)
+
+        self.conv2 = nn.Conv2d(channels, channels, filter_size, padding=pad)
+        self.bn2   = nn.BatchNorm2d(channels)
+        self.act2  = get_act(act_name)
+
+    def forward(self, x):
+        out = self.act1(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = out + x
+        out = self.act2(out)
+        return out
+
+
+class UpsampleBlock(nn.Module):
+
+    def __init__(self, in_ch, out_ch, filter_size):
+        super().__init__()
+        pad = filter_size // 2
+        self.up   = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
+        self.conv = nn.Conv2d(in_ch, out_ch, filter_size, padding=pad)
+
+    def forward(self, x):
+        return self.conv(self.up(x))
+
+
 class VAE(nn.Module):
 
     def __init__(self, latent_dim=128, num_classes=2, filter_size=3,
-                 num_layers=3, activation="relu", decoder_type="deconv"):
+                 num_layers=3, activation="relu", decoder_type="deconv",
+                 num_res_blocks=1):
         super().__init__()
 
         self.latent_dim  = latent_dim
         self.num_classes = num_classes
 
-        acts = {
-            "relu":       nn.ReLU(),
-            "leaky_relu": nn.LeakyReLU(0.2),
-            "elu":        nn.ELU()
-        }
-        act = acts[activation]
-        pad = filter_size // 2
-
-
+        pad          = filter_size // 2
         enc_channels = [3] + [32 * (2 ** i) for i in range(num_layers)]
 
         enc_layers = []
@@ -28,7 +62,9 @@ class VAE(nn.Module):
             enc_layers.append(nn.Conv2d(enc_channels[i], enc_channels[i+1],
                                         filter_size, stride=2, padding=pad))
             enc_layers.append(nn.BatchNorm2d(enc_channels[i+1]))
-            enc_layers.append(act)
+            enc_layers.append(get_act(activation))
+            for _ in range(num_res_blocks):
+                enc_layers.append(ResBlock(enc_channels[i+1], filter_size, activation))
 
         self.encoder        = nn.Sequential(*enc_layers)
         self.final_channels = enc_channels[-1]
@@ -38,7 +74,6 @@ class VAE(nn.Module):
         self.fc_mu     = nn.Linear(flat_dim, latent_dim)
         self.fc_logvar = nn.Linear(flat_dim, latent_dim)
         self.fc_decode = nn.Linear(latent_dim + num_classes, flat_dim)
-
 
         dec_channels = [self.final_channels // (2 ** i) for i in range(num_layers)] + [3]
 
@@ -52,13 +87,13 @@ class VAE(nn.Module):
                                       filter_size, stride=2, padding=pad, output_padding=1)
                 )
             else:
-                dec_layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False))
-                dec_layers.append(nn.Conv2d(dec_channels[i], dec_channels[i+1],
-                                            filter_size, padding=pad))
+                dec_layers.append(UpsampleBlock(dec_channels[i], dec_channels[i+1], filter_size))
 
             if not is_last:
                 dec_layers.append(nn.BatchNorm2d(dec_channels[i+1]))
-                dec_layers.append(act)
+                dec_layers.append(get_act(activation))
+                for _ in range(num_res_blocks):
+                    dec_layers.append(ResBlock(dec_channels[i+1], filter_size, activation))
 
         dec_layers.append(nn.Tanh())
         self.decoder = nn.Sequential(*dec_layers)
