@@ -207,3 +207,9 @@ marimo/_lsp/
 __marimo__/
 /data/faces-spring-2020
 *.png
+*.csv
+.venv/
+models/
+outputs/
+data/resized/
+*.pth
